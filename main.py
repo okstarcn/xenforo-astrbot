@@ -2,32 +2,52 @@ from astrbot.api import star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.core.message.message_event_result import MessageEventResult, EventResultType
 from astrbot.core.message.components import Plain
-from astrbot.core.star.config import StarConfig, ConfigModel
 import requests
 from typing import Dict, Any
 import asyncio
 from quart import request, jsonify
-
-
-class Config(ConfigModel):
-    """插件配置"""
-    xf_url: str = "https://your-domain.com"  # XenForo 站点地址
-    xf_api_key: str = ""  # XenForo API 密钥
-    qq_group_id: int = 0  # QQ 群号
-    napcat_url: str = "http://localhost:3001"  # NapCat HTTP API 地址
-    astrbot_token: str = "AstrBot1234567890"  # AstrBot API 密钥
+import json
+import os
 
 
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
         
-        # 加载配置
-        self.config_helper: StarConfig[Config] = StarConfig(Config)
-        self.cfg = self.config_helper.load_from_config(self.context.get_config_path("config.json"))
+        # 加载配置（使用基础方式）
+        self.cfg = self.load_config()
         
         # 注册 HTTP 路由接收 XenForo 通知
         self.register_http_routes()
+    
+    def load_config(self):
+        """加载配置文件"""
+        config_path = self.context.get_config_path("config.json")
+        default_config = {
+            "xf_url": "https://oksgo.com",
+            "xf_api_key": "Kwcc3l7mDuLeCzuLJnibJklJjzhxd3l_",
+            "qq_group_id": 5977983,
+            "napcat_url": "http://localhost:3001",
+            "astrbot_token": "AstrBot1234567890"
+        }
+        
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # 合并默认配置
+                    for key, value in default_config.items():
+                        if key not in config:
+                            config[key] = value
+                    return type('Config', (), config)()
+            else:
+                # 创建默认配置文件
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(default_config, f, indent=2, ensure_ascii=False)
+                return type('Config', (), default_config)()
+        except Exception as e:
+            print(f"[XenForo] 配置加载失败: {e}")
+            return type('Config', (), default_config)()
     
     def register_http_routes(self):
         """注册 HTTP 路由接收 XenForo 推送"""
