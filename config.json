@@ -1,0 +1,7 @@
+{
+  "xf_url": "https://your-forum.com",
+  "xf_api_key": "your_api_key_here",
+  "threads_limit": 5,
+  "request_timeout": 10,
+  "require_slash": true
+}

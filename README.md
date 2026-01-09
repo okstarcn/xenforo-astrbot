@@ -4,29 +4,21 @@
 
 ## 功能特性
 
-### 🔔 自动通知（XenForo → QQ）
-- ✅ 新主题发布通知
-- ✅ 帖子回复通知  
-- ✅ 用户注册通知
-- ✅ 资源发布/更新通知（支持 XFRM）
-- ✅ 主题删除通知
-
 ### 🤖 QQ 命令（QQ → XenForo）
 - **/论坛** - 查看最新主题列表
-- **/搜索 关键词** - 搜索论坛主题
-- **/用户 用户名** - 查看用户详细信息
+- **/用户 [用户名]** - 查看用户详细信息
+- **/主题 [ID]** - 查看指定主题详情
+- **/回复** - 查看最新回复列表
+- **/热门** - 查看热门主题
+- **/板块** - 查看所有板块列表
+- **/统计** - 查看论坛统计数据
+- **/帮助** - 显示所有可用命令
+
+> 💡 所有命令也支持 `/xf` 前缀，例如：`/xf 论坛`、`/xf 用户 张三`
 
 ---
 
 ## 安装步骤
-
-### 第一步：安装 XenForo 插件
-
-1. 下载 `HuoNiu-QQNotif-1.0.0.zip`
-2. 进入 XenForo 管理后台 → **添加ons** → **安装插件**
-3. 上传 ZIP 文件并安装
-
-### 第二步：安装 AstrBot 插件
 
 1. 将 `xenforo` 文件夹上传到 AstrBot 插件目录：
    ```bash
@@ -40,7 +32,7 @@
    systemctl restart astrbot
    ```
 
-3. 在 AstrBot WebUI 中进入 **插件** 页面，找到 **XenForo**，点击配置
+3. 编辑配置文件 `config.json`（见下方配置说明）
 
 ---
 
@@ -48,49 +40,43 @@
 
 ### AstrBot 插件配置
 
-在 AstrBot WebUI → 插件 → XenForo → 配置：
+**方式一：使用配置文件（推荐）**
 
-| 配置项 | 说明 | 示例 |
-|--------|------|------|
-| **XenForo 站点地址** | 你的论坛完整 URL | `https://your-forum.com` |
-| **XenForo API 密钥** | 从 XF 后台生成的 API 密钥 | `xf_api_xxx...` |
-| **QQ 群号** | 接收通知的 QQ 群 | `123456789` |
-| **NapCat API 地址** | NapCat HTTP API 地址 | `http://localhost:3001` |
-| **AstrBot API 密钥** | XF 回调验证密钥 | `AstrBot1234567890` |
+编辑 `config.json` 文件：
+
+```json
+{
+  "xf_url": "https://your-forum.com",
+  "xf_api_key": "your_api_key_here",
+  "threads_limit": 5,
+  "request_timeout": 10,
+  "require_slash": true
+}
+```
+
+**配置项说明：**
+
+| 配置项 | 必填 | 说明 | 示例 |
+|--------|------|------|------|
+| `xf_url` | ✅ | XenForo 站点地址（不要结尾斜杠） | `https://oksgo.com` |
+| `xf_api_key` | ✅ | XenForo API 密钥 | `xf_api_xxx...` |
+| `threads_limit` | ❌ | 获取主题列表的数量 | `5`（默认） |
+| `request_timeout` | ❌ | API 请求超时时间（秒） | `10`（默认） |
+| `require_slash` | ❌ | 是否要求命令以 / 开头 | `true`（默认） |
+
+**方式二：使用 AstrBot WebUI**
+
+在 AstrBot WebUI → 插件 → XenForo → 配置页面直接配置（如果支持）
 
 **获取 XenForo API 密钥：**
-1. XF 管理后台 → **Setup** → **API keys**
-2. 点击 **Add API key**
-3. 选择 **Super User Key**
-4. 勾选权限：`thread:read`, `thread:write`, `post:read`, `user:read`
-5. 保存后复制生成的密钥
-
-### XenForo 插件配置
-
-在 XenForo 管理后台 → **HuoNiu QQ通知**：
-
-| 配置项 | 说明 | 示例 |
-|--------|------|------|
-| **AstrBot URL** | AstrBot HTTP 地址 | `http://127.0.0.1:6185` |
-| **AstrBot API 密钥** | 与 AstrBot 插件配置中的密钥一致 | `AstrBot1234567890` |
-| **目标 QQ 群号** | 同上 | `123456789` |
-| **启用回复通知** | ☑️ | |
-| **启用注册通知** | ☑️ | |
-| **启用资源通知** | ☑️（需要安装 XFRM）| |
-| **监听的版块 ID** | 逗号分隔，留空监听全部 | `1,2,3` |
-| **通知日志保留天数** | 自动清理旧日志 | `30` |
+1. 登录 XenForo 管理后台 → **设置** → **API 密钥** → 点击 **添加 API 密钥**。
+2. 在“密钥类型”中选择 **游客密钥**，填写一个标题（例如 AstrBot）。
+3. 在“允许 scopes”里勾选所需的数据访问（至少 `thread:read`, `post:read`, `forum:read`, `user:read`）。
+4. 保存后复制生成的密钥（格式形如 `xf_api_xxx...`），并填入 `config.json` 的 `xf_api_key` 字段。
 
 ---
 
-## 测试验证
-
-### 1. 测试 XenForo → QQ 通知
-
-1. 点击 XF 配置页面的 **测试连接** 按钮
-2. 在论坛发布一个测试帖子
-3. 检查 QQ 群是否收到通知
-
-### 2. 测试 QQ 命令
+### 测试 QQ 命令
 
 在 QQ 群发送：
 ```
@@ -103,50 +89,74 @@
 
 ## 常见问题
 
-### Q: 插件已加载但配置界面显示"这个插件没有配置"？
-**A:** 检查 `main.py` 是否包含 `Config` 类定义，重启 AstrBot 后刷新页面。
+### 测试 QQ 命令
 
-### Q: XenForo 发帖后 QQ 群没有收到通知？
-**A:** 检查：
-1. XF 后台配置的 AstrBot URL 是否正确
-2. AstrBot API 密钥是否一致
-3. AstrBot 和 NapCat 是否正常运行
-4. 查看 XF 通知日志（后台 → HuoNiu QQ通知 → 查看日志）
+在 QQ 群发送：
+```
+/帮助
+```
+应该会返回所有可用命令列表。
+
+再测试其他命令：
+```
+/论坛
+/统计
+/热门
+```
+
+如果命令无响应，检查：
+1. `config.json` 中的 `xf_url` 和 `xf_api_key` 是否配置正确
+2. AstrBot 是否重启生效
+3. AstrBot 日志中是否有错误信息
+
+---
+
+## 常见问题
+
+### Q: 配置文件在哪里？
+**A:** 配置文件位于插件目录下的 `config.json`，通常在：
+- `/你的AstrBot路径/data/plugins/xenforo/config.json`
+
+### Q: 修改配置后不生效？
+**A:** 重启 AstrBot 使配置生效：
+```bash
+pm2 restart AstrBot
+# 或
+systemctl restart astrbot
+```
 
 ### Q: QQ 命令无响应？
 **A:** 检查：
-1. QQ 群号是否配置正确
-2. NapCat 是否正常运行（`pm2 list` 查看状态）
-3. XenForo API 密钥是否正确
-4. AstrBot 日志中是否有错误
-
-### Q: NapCat 端口是 3000 还是 3001？
-**A:** 取决于你的 NapCat 启动参数，常见端口是 3001。使用 `netstat -tuln | grep 300` 查看实际端口。
+1. `xf_url` 和 `xf_api_key` 是否配置正确
+2. XenForo API 是否启用（访问 `https://你的论坛.com/api/` 测试）
+3. 防火墙是否拦截了 API 请求
+4. AstrBot 日志中是否有错误信息
 
 ---
 
 ## 系统要求
 
-- **XenForo**: 2.2.0 或更高版本
+- **XenForo**: 2.3.0 或更高版本
 - **AstrBot**: 4.11.0 或更高版本
-- **NapCat**: 任意版本（支持 OneBot 11 协议）
-- **PHP**: 8.0 或更高版本
 - **Python**: 3.11 或更高版本
-
----
-
-## 技术支持
-
-- GitHub Issues: [项目地址]
-- 论坛: [你的论坛地址]
-- QQ 群: [支持群号]
 
 ---
 
 ## 更新日志
 
+### v1.0.2 (2026-01-09)
+- 📝 添加配置文件模板，简化安装流程
+- 📝 完善 README 文档说明
+
+### v1.0.1 (2026-01-09)
+- ✨ 新增功能：主题详情、最新回复、热门主题、板块列表、论坛统计
+- ✨ 新增帮助命令，显示所有可用命令
+- 🐛 修复用户注册时间显示为时间戳的问题
+- 📝 优化配置文件说明
+
 ### v1.0.0 (2026-01-09)
 - ✨ 首次发布
+- 支持查询最新主题和用户信息
 - ✅ XenForo → QQ 自动通知
 - ✅ QQ 命令查询论坛数据
 - ✅ XFRM 资源通知支持
@@ -162,10 +172,10 @@ MIT License
 
 ## 鸣谢
 
+- [HuoNiu Team](https://oksgo.com/) - 本插件作者
 - [XenForo](https://xenforo.com/) - 强大的论坛系统
 - [AstrBot](https://github.com/Soulter/AstrBot) - 优秀的 QQ 机器人框架
-- [NapCat](https://github.com/NapNeko/NapCatQQ) - QQ OneBot 实现
 
 ---
 
-**制作：HuoNiu Team**
+**制作：HuoNiu Team | [访问论坛](https://oksgo.com/)**

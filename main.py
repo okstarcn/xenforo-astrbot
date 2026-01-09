@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -17,18 +18,16 @@ class Config:
         xf_url: str = "",
         xf_api_key: str = "",
         threads_limit: int = 5,
-        search_limit: int = 5,
         request_timeout: int = 10,
         require_slash: bool = True,
     ):
         self.xf_url = xf_url
         self.xf_api_key = xf_api_key
         self.threads_limit = threads_limit
-        self.search_limit = search_limit
         self.request_timeout = request_timeout
         self.require_slash = require_slash
 
-@register("xenforo_astrbot", "HuoNiu", "XenForo 论坛集成插件", "1.0.1")
+@register("xenforo_astrbot", "HuoNiu", "XenForo 论坛集成插件", "1.0.2")
 class Main(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -66,7 +65,6 @@ class Main(Star):
             cfg.xf_url = str(raw.get("xf_url", cfg.xf_url) or "")
             cfg.xf_api_key = str(raw.get("xf_api_key", cfg.xf_api_key) or "")
             cfg.threads_limit = int(raw.get("threads_limit", cfg.threads_limit) or cfg.threads_limit)
-            cfg.search_limit = int(raw.get("search_limit", cfg.search_limit) or cfg.search_limit)
             cfg.request_timeout = int(raw.get("request_timeout", cfg.request_timeout) or cfg.request_timeout)
             cfg.require_slash = bool(raw.get("require_slash", cfg.require_slash))
         except Exception as e:
@@ -120,6 +118,17 @@ class Main(Star):
             return "请求过于频繁(429)：请稍后再试"
         return f"API错误: {status_code}"
 
+    def _format_timestamp(self, timestamp) -> str:
+        """将Unix时间戳转换为可读的日期时间格式"""
+        try:
+            if timestamp is None:
+                return "未知"
+            dt = datetime.fromtimestamp(int(timestamp))
+            return dt.strftime("%Y年%m月%d日 %H:%M:%S")
+        except Exception as e:
+            logger.warning(f"[XenForo] 时间戳转换失败: {timestamp}, 错误: {e}")
+            return str(timestamp)
+
     def _fetch_latest_threads_text(self, limit: int = 5) -> str:
         try:
             response = requests.get(
@@ -151,100 +160,206 @@ class Main(Star):
             msg += f"  {self.xf_url}/threads/{thread_id}/\n\n"
         return msg
 
-    def _extract_search_keyword(self, raw_text: str) -> Optional[str]:
-        text = self._normalize_text(raw_text)
-        for prefix in ("xf搜索", "xf 搜索", "搜索"):
-            if text.startswith(prefix):
-                keyword = text[len(prefix):].strip()
-                return keyword or None
-        return None
-
-    def _fetch_search_threads_text(self, keyword: str, limit: int = 5) -> str:
-        # XenForo REST API (2.2+) search flow:
-        # 1) POST /api/search   -> returns search_id
-        # 2) GET  /api/search/{id} -> returns results
+    def _fetch_thread_detail_text(self, thread_id: str) -> str:
+        """获取主题详情"""
         try:
-            create = requests.post(
-                f"{self.xf_url}/api/search",
+            response = requests.get(
+                f"{self.xf_url}/api/threads/{thread_id}",
                 headers=self._headers(),
-                json={
-                    "search_type": "thread",
-                    "keywords": keyword,
+                timeout=self.cfg.request_timeout,
+            )
+        except Exception as e:
+            return f"请求失败: {e}"
+
+        if response.status_code != 200:
+            return self._format_http_error(response.status_code)
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return f"解析返回失败: {e}"
+
+        thread = data.get("thread", {})
+        if not thread:
+            return f"未找到主题 ID: {thread_id}"
+
+        msg = "📄 主题详情\n\n"
+        msg += f"标题: {thread.get('title', '无标题')}\n"
+        msg += f"作者: {thread.get('username', '未知')}\n"
+        msg += f"回复数: {thread.get('reply_count', 0)}\n"
+        msg += f"浏览数: {thread.get('view_count', 0)}\n"
+        
+        post_date = thread.get('post_date')
+        if post_date:
+            msg += f"发布时间: {self._format_timestamp(post_date)}\n"
+        
+        msg += f"\n{self.xf_url}/threads/{thread_id}/\n"
+        
+        return msg
+
+    def _fetch_latest_posts_text(self, limit: int = 5) -> str:
+        """获取最新回复"""
+        try:
+            response = requests.get(
+                f"{self.xf_url}/api/posts",
+                headers=self._headers(),
+                params={"limit": limit},
+                timeout=self.cfg.request_timeout,
+            )
+        except Exception as e:
+            return f"请求失败: {e}"
+
+        if response.status_code != 200:
+            return self._format_http_error(response.status_code)
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return f"解析返回失败: {e}"
+
+        posts = data.get("posts", [])
+        if not posts:
+            return "暂无回复"
+
+        msg = "💬 最新回复：\n\n"
+        for p in posts[:limit]:
+            thread_id = p.get("thread_id", "")
+            post_id = p.get("post_id", "")
+            msg += f"• 主题: {p.get('Thread', {}).get('title', '无标题')}\n"
+            msg += f"  回复者: {p.get('username', '未知')}\n"
+            if thread_id:
+                msg += f"  {self.xf_url}/threads/{thread_id}/#post-{post_id}\n\n"
+            else:
+                msg += "\n"
+        return msg
+
+    def _fetch_forum_stats_text(self) -> str:
+        """获取论坛统计信息"""
+        try:
+            response = requests.get(
+                f"{self.xf_url}/api/index",
+                headers=self._headers(),
+                timeout=self.cfg.request_timeout,
+            )
+        except Exception as e:
+            return f"请求失败: {e}"
+
+        if response.status_code != 200:
+            return self._format_http_error(response.status_code)
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return f"解析返回失败: {e}"
+
+        msg = "📊 论坛统计\n\n"
+        
+        # 从返回数据中提取统计信息
+        if "boardStats" in data:
+            stats = data["boardStats"]
+            msg += f"总主题数: {stats.get('messages', 0):,}\n"
+            msg += f"总用户数: {stats.get('members', 0):,}\n"
+            if "latestMember" in stats:
+                msg += f"最新用户: {stats['latestMember'].get('username', '未知')}\n"
+        elif "statistics" in data:
+            stats = data["statistics"]
+            msg += f"总主题数: {stats.get('threads', 0):,}\n"
+            msg += f"总回复数: {stats.get('messages', 0):,}\n"
+            msg += f"总用户数: {stats.get('users', 0):,}\n"
+        else:
+            msg += "统计信息不可用"
+        
+        return msg
+
+    def _fetch_forums_list_text(self) -> str:
+        """获取板块列表"""
+        try:
+            response = requests.get(
+                f"{self.xf_url}/api/forums",
+                headers=self._headers(),
+                timeout=self.cfg.request_timeout,
+            )
+        except Exception as e:
+            return f"请求失败: {e}"
+
+        if response.status_code != 200:
+            return self._format_http_error(response.status_code)
+
+        try:
+            data = response.json()
+        except Exception as e:
+            return f"解析返回失败: {e}"
+
+        forums = data.get("forums", [])
+        if not forums:
+            return "暂无板块"
+
+        msg = "📁 板块列表：\n\n"
+        for f in forums:
+            forum_id = f.get("node_id", "")
+            msg += f"• {f.get('title', '无标题')}\n"
+            msg += f"  ID: {forum_id}\n"
+            msg += f"  主题数: {f.get('discussion_count', 0)}\n"
+            msg += f"  {self.xf_url}/forums/{forum_id}/\n\n"
+        return msg
+
+    def _fetch_hot_threads_text(self, limit: int = 5) -> str:
+        """获取热门主题"""
+        try:
+            response = requests.get(
+                f"{self.xf_url}/api/threads",
+                headers=self._headers(),
+                params={
+                    "limit": limit * 2,  # 获取更多再筛选
+                    "order": "reply_count"
                 },
                 timeout=self.cfg.request_timeout,
             )
         except Exception as e:
-            return f"搜索请求失败: {e}"
+            return f"请求失败: {e}"
 
-        if create.status_code != 200:
-            return f"搜索失败: {self._format_http_error(create.status_code)}"
+        if response.status_code != 200:
+            return self._format_http_error(response.status_code)
 
         try:
-            create_data = create.json()
+            data = response.json()
         except Exception as e:
-            return f"搜索解析失败: {e}"
-        search_id = (
-            (create_data.get("search") or {}).get("search_id")
-            or create_data.get("search_id")
-            or (create_data.get("search") or {}).get("id")
+            return f"解析返回失败: {e}"
+
+        threads = data.get("threads", [])
+        if not threads:
+            return "暂无热门主题"
+
+        # 按回复数排序
+        sorted_threads = sorted(
+            threads, 
+            key=lambda x: x.get('reply_count', 0), 
+            reverse=True
         )
 
-        if not search_id:
-            return "搜索失败: 未获取到 search_id"
+        msg = "🔥 热门主题：\n\n"
+        for t in sorted_threads[:limit]:
+            thread_id = t.get("thread_id", "")
+            msg += f"• {t.get('title', '无标题')}\n"
+            msg += f"  作者: {t.get('username', '未知')}\n"
+            msg += f"  回复: {t.get('reply_count', 0)} | 浏览: {t.get('view_count', 0)}\n"
+            msg += f"  {self.xf_url}/threads/{thread_id}/\n\n"
+        return msg
 
-        try:
-            result = requests.get(
-                f"{self.xf_url}/api/search/{search_id}",
-                headers=self._headers(),
-                params={"page": 1},
-                timeout=self.cfg.request_timeout,
-            )
-        except Exception as e:
-            return f"获取搜索结果失败: {e}"
-
-        if result.status_code != 200:
-            return f"搜索失败: {self._format_http_error(result.status_code)}"
-
-        try:
-            data = result.json()
-        except Exception as e:
-            return f"搜索结果解析失败: {e}"
-        results = data.get("results", [])
-        if not results:
-            return f"未找到关于 '{keyword}' 的结果"
-
-        msg = f"🔍 搜索结果：{keyword}\n\n"
-        for r in results[:limit]:
-            content = r.get("content") or {}
-            title = (
-                r.get("title")
-                or content.get("title")
-                or (content.get("Thread") or {}).get("title")
-                or "无标题"
-            )
-            url = (
-                r.get("view_url")
-                or content.get("view_url")
-                or (content.get("Thread") or {}).get("view_url")
-            )
-
-            if not url:
-                thread_id = (
-                    r.get("thread_id")
-                    or content.get("thread_id")
-                    or (content.get("Thread") or {}).get("thread_id")
-                )
-                if thread_id:
-                    url = f"{self.xf_url}/threads/{thread_id}/"
-
-            url = self._abs_url(url)
-
-            msg += f"• {title}\n"
-            if url:
-                msg += f"  {url}\n\n"
-            else:
-                msg += "  (无链接)\n\n"
-
+    def _get_help_text(self) -> str:
+        """获取帮助信息"""
+        msg = "🤖 XenForo 插件命令列表\n\n"
+        msg += "📌 基础功能：\n"
+        msg += "/论坛 - 获取最新主题列表\n"
+        msg += "/用户 [用户名] - 查询用户信息\n"
+        msg += "/主题 [ID] - 查看指定主题详情\n"
+        msg += "/回复 - 获取最新回复列表\n"
+        msg += "/热门 - 查看热门主题\n"
+        msg += "/板块 - 查看所有板块列表\n"
+        msg += "/统计 - 查看论坛统计数据\n"
+        msg += "/帮助 - 显示此帮助信息\n\n"
+        msg += "💡 提示：所有命令也可以使用 /xf 前缀\n"
+        msg += "例如：/xf 论坛、/xf 用户 张三\n"
         return msg
 
     def _fetch_user_info_text(self, username: str) -> str:
@@ -275,7 +390,7 @@ class Main(Star):
         if user.get("user_id") is not None:
             msg += f"用户ID: {user.get('user_id')}\n"
         if user.get("register_date") is not None:
-            msg += f"注册时间: {user.get('register_date')}\n"
+            msg += f"注册时间: {self._format_timestamp(user.get('register_date'))}\n"
         msg += f"帖子数: {user.get('message_count', 0)}\n"
         msg += f"反应分: {user.get('reaction_score', 0)}\n"
 
@@ -304,30 +419,6 @@ class Main(Star):
             logger.error(f"[XenForo] 获取帖子失败: {e}")
             yield event.plain_result(f"出错了: {str(e)}")
 
-    # @filter.command("搜索")
-    # async def search_cmd(self, event: AstrMessageEvent, keyword: str = ""):
-    #     """搜索帖子（兼容 /搜索 关键词）"""
-    #     err = self._ensure_ready()
-    #     if err:
-    #         yield event.plain_result(err)
-    #         return
-    #
-    #     keyword = (keyword or "").strip() or (self._extract_search_keyword(event.message_str) or "").strip()
-    #     if not keyword:
-    #         yield event.plain_result("请输入搜索关键词，例如：/搜索 Python")
-    #         return
-    #
-    #     try:
-    #         text = await asyncio.to_thread(
-    #             self._fetch_search_threads_text,
-    #             keyword,
-    #             limit=int(self.cfg.search_limit or 5),
-    #         )
-    #         yield event.plain_result(text)
-    #     except Exception as e:
-    #         logger.error(f"[XenForo] 搜索失败: {e}")
-    #         yield event.plain_result(f"出错了: {str(e)}")
-
     @filter.command("用户")
     async def user_cmd(self, event: AstrMessageEvent, username: str = ""):
         """查询用户信息（/用户 用户名）"""
@@ -353,6 +444,107 @@ class Main(Star):
             logger.error(f"[XenForo] 用户查询失败: {e}")
             yield event.plain_result(f"出错了: {str(e)}")
     
+    @filter.command("主题")
+    async def thread_cmd(self, event: AstrMessageEvent, thread_id: str = ""):
+        """查看主题详情（/主题 ID）"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        thread_id = (thread_id or "").strip()
+        if not thread_id:
+            raw = self._normalize_text(event.message_str)
+            if raw.startswith("主题"):
+                thread_id = raw[len("主题") :].strip()
+
+        if not thread_id:
+            yield event.plain_result("请输入主题ID，例如：/主题 123")
+            return
+
+        try:
+            text = await asyncio.to_thread(self._fetch_thread_detail_text, thread_id)
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取主题失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @filter.command("回复")
+    async def posts_cmd(self, event: AstrMessageEvent):
+        """获取最新回复（/回复）"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(
+                self._fetch_latest_posts_text,
+                limit=5,
+            )
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取回复失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @filter.command("统计")
+    async def stats_cmd(self, event: AstrMessageEvent):
+        """获取论坛统计（/统计）"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(self._fetch_forum_stats_text)
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取统计失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @filter.command("板块")
+    async def forums_cmd(self, event: AstrMessageEvent):
+        """获取板块列表（/板块）"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(self._fetch_forums_list_text)
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取板块失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @filter.command("热门")
+    async def hot_cmd(self, event: AstrMessageEvent):
+        """获取热门主题（/热门）"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(
+                self._fetch_hot_threads_text,
+                limit=5,
+            )
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取热门主题失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+    
+    @filter.command("帮助")
+    async def help_cmd(self, event: AstrMessageEvent):
+        """显示帮助信息（/帮助）"""
+        try:
+            text = self._get_help_text()
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取帮助失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+    
     @filter.command_group("xf")
     def xf(self):
         """XenForo 命令组"""
@@ -376,30 +568,6 @@ class Main(Star):
             logger.error(f"[XenForo] 获取帖子失败: {e}")
             yield event.plain_result(f"出错了: {str(e)}")
     
-    # @xf.command("搜索")
-    # async def search(self, event: AstrMessageEvent, keyword: str = ""):
-    #     """搜索帖子: xf 搜索 关键词"""
-    #     err = self._ensure_ready()
-    #     if err:
-    #         yield event.plain_result(err)
-    #         return
-    #
-    #     keyword = (keyword or "").strip() or (self._extract_search_keyword(event.message_str) or "").strip()
-    #     if not keyword:
-    #         yield event.plain_result("请输入搜索关键词，例如：/搜索 Python")
-    #         return
-    #     
-    #     try:
-    #         text = await asyncio.to_thread(
-    #             self._fetch_search_threads_text,
-    #             keyword,
-    #             limit=int(self.cfg.search_limit or 5),
-    #         )
-    #         yield event.plain_result(text)
-    #     except Exception as e:
-    #         logger.error(f"[XenForo] 搜索失败: {e}")
-    #         yield event.plain_result(f"出错了: {str(e)}")
-
     @xf.command("用户")
     async def user(self, event: AstrMessageEvent, username: str = ""):
         """查询用户信息: xf 用户 用户名"""
@@ -427,4 +595,109 @@ class Main(Star):
             yield event.plain_result(text)
         except Exception as e:
             logger.error(f"[XenForo] 用户查询失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @xf.command("主题")
+    async def thread(self, event: AstrMessageEvent, thread_id: str = ""):
+        """查看主题详情: xf 主题 ID"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        thread_id = (thread_id or "").strip()
+        if not thread_id:
+            raw = self._normalize_text(event.message_str)
+            if raw.startswith("xf 主题"):
+                thread_id = raw[len("xf 主题") :].strip()
+            elif raw.startswith("xf主题"):
+                thread_id = raw[len("xf主题") :].strip()
+            elif raw.startswith("主题"):
+                thread_id = raw[len("主题") :].strip()
+
+        if not thread_id:
+            yield event.plain_result("请输入主题ID，例如：/主题 123")
+            return
+
+        try:
+            text = await asyncio.to_thread(self._fetch_thread_detail_text, thread_id)
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取主题失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @xf.command("回复")
+    async def posts(self, event: AstrMessageEvent):
+        """获取最新回复: xf 回复"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(
+                self._fetch_latest_posts_text,
+                limit=5,
+            )
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取回复失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @xf.command("统计")
+    async def stats(self, event: AstrMessageEvent):
+        """获取论坛统计: xf 统计"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(self._fetch_forum_stats_text)
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取统计失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @xf.command("板块")
+    async def forums(self, event: AstrMessageEvent):
+        """获取板块列表: xf 板块"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(self._fetch_forums_list_text)
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取板块失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @xf.command("热门")
+    async def hot(self, event: AstrMessageEvent):
+        """获取热门主题: xf 热门"""
+        err = self._ensure_ready()
+        if err:
+            yield event.plain_result(err)
+            return
+
+        try:
+            text = await asyncio.to_thread(
+                self._fetch_hot_threads_text,
+                limit=5,
+            )
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取热门主题失败: {e}")
+            yield event.plain_result(f"出错了: {str(e)}")
+
+    @xf.command("帮助")
+    async def help(self, event: AstrMessageEvent):
+        """显示帮助信息: xf 帮助"""
+        try:
+            text = self._get_help_text()
+            yield event.plain_result(text)
+        except Exception as e:
+            logger.error(f"[XenForo] 获取帮助失败: {e}")
             yield event.plain_result(f"出错了: {str(e)}")
