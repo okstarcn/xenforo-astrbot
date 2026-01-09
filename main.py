@@ -250,7 +250,7 @@ class Main(Star):
     def _fetch_user_info_text(self, username: str) -> str:
         try:
             response = requests.get(
-                f"{self.xf_url}/api/users/find",
+                f"{self.xf_url}/api/users/find-name",
                 headers=self._headers(),
                 params={"username": username},
                 timeout=self.cfg.request_timeout,
@@ -266,7 +266,7 @@ class Main(Star):
         except Exception as e:
             return f"解析返回失败: {e}"
 
-        user = data.get("user")
+        user = data.get("exact")
         if not user:
             return f"未找到用户: {username}"
 
@@ -304,9 +304,9 @@ class Main(Star):
             logger.error(f"[XenForo] 获取帖子失败: {e}")
             yield event.plain_result(f"出错了: {str(e)}")
 
-    @filter.command("搜索")
-    async def search_cmd(self, event: AstrMessageEvent, keyword: str = ""):
-        """搜索帖子（兼容 /搜索 关键词）"""
+    # @filter.command("搜索")
+    # async def search_cmd(self, event: AstrMessageEvent, keyword: str = ""):
+    #     """搜索帖子（兼容 /搜索 关键词）"""
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
@@ -376,9 +376,9 @@ class Main(Star):
             logger.error(f"[XenForo] 获取帖子失败: {e}")
             yield event.plain_result(f"出错了: {str(e)}")
     
-    @xf.command("搜索")
-    async def search(self, event: AstrMessageEvent, keyword: str = ""):
-        """搜索帖子: xf 搜索 关键词"""
+    # @xf.command("搜索")
+    # async def search(self, event: AstrMessageEvent, keyword: str = ""):
+    #     """搜索帖子: xf 搜索 关键词"""
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
