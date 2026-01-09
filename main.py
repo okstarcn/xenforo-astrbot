@@ -22,7 +22,10 @@ class Main(star.Star):
     
     def load_config(self):
         """加载配置文件"""
-        config_path = self.context.get_config_path("config.json")
+        # 获取插件目录
+        plugin_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(plugin_dir, "config.json")
+        
         default_config = {
             "xf_url": "https://oksgo.com",
             "xf_api_key": "Kwcc3l7mDuLeCzuLJnibJklJjzhxd3l_",
@@ -39,14 +42,16 @@ class Main(star.Star):
                     for key, value in default_config.items():
                         if key not in config:
                             config[key] = value
+                    print(f"[XenForo] 配置已加载: {config_path}")
                     return type('Config', (), config)()
             else:
                 # 创建默认配置文件
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(default_config, f, indent=2, ensure_ascii=False)
+                print(f"[XenForo] 配置文件已创建: {config_path}")
                 return type('Config', (), default_config)()
         except Exception as e:
-            print(f"[XenForo] 配置加载失败: {e}")
+            print(f"[XenForo] 配置加载失败: {e}，使用默认配置")
             return type('Config', (), default_config)()
     
     def register_http_routes(self):
