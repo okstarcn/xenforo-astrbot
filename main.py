@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -7,23 +8,30 @@ import requests
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
-from astrbot.core.star.config import ConfigModel, StarConfig
 
 
-class Config(ConfigModel):
-    xf_url: str = ""  # XenForo 站点地址，例如 https://your-forum.com
-    xf_api_key: str = ""  # XenForo API 密钥
-    threads_limit: int = 5
-    search_limit: int = 5
-    request_timeout: int = 10
-    require_slash: bool = True  # 是否强制要求以 / 开头的命令
+class Config:
+    def __init__(
+        self,
+        xf_url: str = "",
+        xf_api_key: str = "",
+        threads_limit: int = 5,
+        search_limit: int = 5,
+        request_timeout: int = 10,
+        require_slash: bool = True,
+    ):
+        self.xf_url = xf_url
+        self.xf_api_key = xf_api_key
+        self.threads_limit = threads_limit
+        self.search_limit = search_limit
+        self.request_timeout = request_timeout
+        self.require_slash = require_slash
 
 @register("xenforo_astrbot", "HuoNiu", "XenForo 论坛集成插件", "1.0.0")
 class Main(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
-        self.config_helper: StarConfig[Config] = StarConfig(Config)
         self._cfg_path = self.context.get_config_path("config.json")
         self.cfg = self._safe_load_config(self._cfg_path)
         self._apply_cfg()
@@ -31,11 +39,28 @@ class Main(Star):
         logger.info("[XenForo] 插件已初始化")
 
     def _safe_load_config(self, cfg_path: str) -> Config:
+        cfg = Config()
         try:
-            return self.config_helper.load_from_config(cfg_path)
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                raw = json.load(f) or {}
+        except FileNotFoundError:
+            logger.warning(f"[XenForo] 未找到配置文件: {cfg_path}（将使用默认配置）")
+            return cfg
         except Exception as e:
             logger.error(f"[XenForo] 读取配置失败，将使用默认配置: {e}")
-            return Config()
+            return cfg
+
+        try:
+            cfg.xf_url = str(raw.get("xf_url", cfg.xf_url) or "")
+            cfg.xf_api_key = str(raw.get("xf_api_key", cfg.xf_api_key) or "")
+            cfg.threads_limit = int(raw.get("threads_limit", cfg.threads_limit) or cfg.threads_limit)
+            cfg.search_limit = int(raw.get("search_limit", cfg.search_limit) or cfg.search_limit)
+            cfg.request_timeout = int(raw.get("request_timeout", cfg.request_timeout) or cfg.request_timeout)
+            cfg.require_slash = bool(raw.get("require_slash", cfg.require_slash))
+        except Exception as e:
+            logger.error(f"[XenForo] 配置字段解析失败，将使用默认值: {e}")
+
+        return cfg
 
     def _refresh_cfg(self) -> None:
         self.cfg = self._safe_load_config(self._cfg_path)
@@ -55,9 +80,9 @@ class Main(Star):
     def _ensure_ready(self) -> Optional[str]:
         self._refresh_cfg()
         if not self.xf_url:
-            return "请先在 AstrBot WebUI → 插件 → XenForo 中配置：XenForo 站点地址"
+            return f"请先配置 XenForo 站点地址：{self._cfg_path} 里的 xf_url"
         if not self.xf_api_key:
-            return "请先在 AstrBot WebUI → 插件 → XenForo 中配置：XenForo API 密钥"
+            return f"请先配置 XenForo API 密钥：{self._cfg_path} 里的 xf_api_key"
         return None
 
     def _headers(self) -> dict:

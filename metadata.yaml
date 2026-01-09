@@ -2,6 +2,6 @@ name: XenForo
 display_name: XenForo
 desc: XenForo 论坛集成插件
 author: HuoNiu
-version: 1.0.0
+version: 1.0.1
 repo: https://github.com/okstarcn/xenforo-astrbot
 icon: logo.png
