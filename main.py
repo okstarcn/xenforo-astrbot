@@ -289,10 +289,6 @@ class Main(Star):
     @filter.command("论坛")
     async def forum_cmd(self, event: AstrMessageEvent):
         """获取最新帖子（兼容 /论坛）"""
-        if self.cfg.require_slash and not self._is_slash_message(event.message_str):
-            yield event.plain_result("请使用：/论坛")
-            return
-
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
@@ -311,10 +307,6 @@ class Main(Star):
     @filter.command("搜索")
     async def search_cmd(self, event: AstrMessageEvent, keyword: str = ""):
         """搜索帖子（兼容 /搜索 关键词）"""
-        if self.cfg.require_slash and not self._is_slash_message(event.message_str):
-            yield event.plain_result("请使用：/搜索 关键词")
-            return
-
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
@@ -339,10 +331,6 @@ class Main(Star):
     @filter.command("用户")
     async def user_cmd(self, event: AstrMessageEvent, username: str = ""):
         """查询用户信息（/用户 用户名）"""
-        if self.cfg.require_slash and not self._is_slash_message(event.message_str):
-            yield event.plain_result("请使用：/用户 用户名")
-            return
-
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
@@ -373,10 +361,6 @@ class Main(Star):
     @xf.command("论坛")
     async def forum(self, event: AstrMessageEvent):
         """获取最新帖子"""
-        if self.cfg.require_slash and not self._is_slash_message(event.message_str):
-            yield event.plain_result("请使用：/论坛")
-            return
-
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
@@ -395,10 +379,6 @@ class Main(Star):
     @xf.command("搜索")
     async def search(self, event: AstrMessageEvent, keyword: str = ""):
         """搜索帖子: xf 搜索 关键词"""
-        if self.cfg.require_slash and not self._is_slash_message(event.message_str):
-            yield event.plain_result("请使用：/搜索 关键词")
-            return
-
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
@@ -423,10 +403,6 @@ class Main(Star):
     @xf.command("用户")
     async def user(self, event: AstrMessageEvent, username: str = ""):
         """查询用户信息: xf 用户 用户名"""
-        if self.cfg.require_slash and not self._is_slash_message(event.message_str):
-            yield event.plain_result("请使用：/用户 用户名")
-            return
-
         err = self._ensure_ready()
         if err:
             yield event.plain_result(err)
