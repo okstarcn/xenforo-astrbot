@@ -307,26 +307,26 @@ class Main(Star):
     # @filter.command("搜索")
     # async def search_cmd(self, event: AstrMessageEvent, keyword: str = ""):
     #     """搜索帖子（兼容 /搜索 关键词）"""
-        err = self._ensure_ready()
-        if err:
-            yield event.plain_result(err)
-            return
-
-        keyword = (keyword or "").strip() or (self._extract_search_keyword(event.message_str) or "").strip()
-        if not keyword:
-            yield event.plain_result("请输入搜索关键词，例如：/搜索 Python")
-            return
-
-        try:
-            text = await asyncio.to_thread(
-                self._fetch_search_threads_text,
-                keyword,
-                limit=int(self.cfg.search_limit or 5),
-            )
-            yield event.plain_result(text)
-        except Exception as e:
-            logger.error(f"[XenForo] 搜索失败: {e}")
-            yield event.plain_result(f"出错了: {str(e)}")
+    #     err = self._ensure_ready()
+    #     if err:
+    #         yield event.plain_result(err)
+    #         return
+    #
+    #     keyword = (keyword or "").strip() or (self._extract_search_keyword(event.message_str) or "").strip()
+    #     if not keyword:
+    #         yield event.plain_result("请输入搜索关键词，例如：/搜索 Python")
+    #         return
+    #
+    #     try:
+    #         text = await asyncio.to_thread(
+    #             self._fetch_search_threads_text,
+    #             keyword,
+    #             limit=int(self.cfg.search_limit or 5),
+    #         )
+    #         yield event.plain_result(text)
+    #     except Exception as e:
+    #         logger.error(f"[XenForo] 搜索失败: {e}")
+    #         yield event.plain_result(f"出错了: {str(e)}")
 
     @filter.command("用户")
     async def user_cmd(self, event: AstrMessageEvent, username: str = ""):
@@ -379,26 +379,26 @@ class Main(Star):
     # @xf.command("搜索")
     # async def search(self, event: AstrMessageEvent, keyword: str = ""):
     #     """搜索帖子: xf 搜索 关键词"""
-        err = self._ensure_ready()
-        if err:
-            yield event.plain_result(err)
-            return
-
-        keyword = (keyword or "").strip() or (self._extract_search_keyword(event.message_str) or "").strip()
-        if not keyword:
-            yield event.plain_result("请输入搜索关键词，例如：/搜索 Python")
-            return
-        
-        try:
-            text = await asyncio.to_thread(
-                self._fetch_search_threads_text,
-                keyword,
-                limit=int(self.cfg.search_limit or 5),
-            )
-            yield event.plain_result(text)
-        except Exception as e:
-            logger.error(f"[XenForo] 搜索失败: {e}")
-            yield event.plain_result(f"出错了: {str(e)}")
+    #     err = self._ensure_ready()
+    #     if err:
+    #         yield event.plain_result(err)
+    #         return
+    #
+    #     keyword = (keyword or "").strip() or (self._extract_search_keyword(event.message_str) or "").strip()
+    #     if not keyword:
+    #         yield event.plain_result("请输入搜索关键词，例如：/搜索 Python")
+    #         return
+    #     
+    #     try:
+    #         text = await asyncio.to_thread(
+    #             self._fetch_search_threads_text,
+    #             keyword,
+    #             limit=int(self.cfg.search_limit or 5),
+    #         )
+    #         yield event.plain_result(text)
+    #     except Exception as e:
+    #         logger.error(f"[XenForo] 搜索失败: {e}")
+    #         yield event.plain_result(f"出错了: {str(e)}")
 
     @xf.command("用户")
     async def user(self, event: AstrMessageEvent, username: str = ""):
