@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from typing import Optional
 from urllib.parse import urljoin
 
@@ -27,16 +28,27 @@ class Config:
         self.request_timeout = request_timeout
         self.require_slash = require_slash
 
-@register("xenforo_astrbot", "HuoNiu", "XenForo 论坛集成插件", "1.0.0")
+@register("xenforo_astrbot", "HuoNiu", "XenForo 论坛集成插件", "1.0.1")
 class Main(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
-        self._cfg_path = self.context.get_config_path("config.json")
+        self._cfg_path = self._resolve_config_path("config.json")
         self.cfg = self._safe_load_config(self._cfg_path)
         self._apply_cfg()
 
         logger.info("[XenForo] 插件已初始化")
+
+    def _resolve_config_path(self, filename: str) -> str:
+        get_config_path = getattr(self.context, "get_config_path", None)
+        if callable(get_config_path):
+            try:
+                return get_config_path(filename)
+            except Exception as e:
+                logger.warning(f"[XenForo] get_config_path 调用失败，将回退到插件目录: {e}")
+
+        # 兼容旧版：配置文件放在插件目录同级（例如 /root/AstrBot/data/plugins/xenforo_astrbot/config.json）
+        return os.path.join(os.path.dirname(__file__), filename)
 
     def _safe_load_config(self, cfg_path: str) -> Config:
         cfg = Config()
