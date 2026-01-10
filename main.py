@@ -10,6 +10,7 @@ import requests
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, register
+from astrbot.api.provider import Provider
 
 
 class Config:
@@ -37,6 +38,78 @@ class Main(Star):
         self._apply_cfg()
 
         logger.info("[XenForo] 插件已初始化")
+        
+        # 注册HTTP路由接收XenForo通知
+        self._register_http_routes()
+
+    def _register_http_routes(self):
+        """注册HTTP路由"""
+        try:
+            provider: Provider = self.context.get_provider()
+            if provider and hasattr(provider, 'register_http_route'):
+                # 注册通知接收端点
+                provider.register_http_route(
+                    path='/xenforo/notify',
+                    methods=['POST'],
+                    handler=self._handle_xenforo_notification
+                )
+                # 注册测试端点
+                provider.register_http_route(
+                    path='/xenforo/test',
+                    methods=['GET', 'POST'],
+                    handler=self._handle_test
+                )
+                logger.info("[XenForo] HTTP路由已注册: /xenforo/notify, /xenforo/test")
+            else:
+                logger.warning("[XenForo] 当前AstrBot版本不支持HTTP路由注册")
+        except Exception as e:
+            logger.error(f"[XenForo] HTTP路由注册失败: {e}")
+    
+    async def _handle_xenforo_notification(self, request):
+        """处理来自XenForo的通知"""
+        try:
+            # 获取JSON数据
+            if hasattr(request, 'json'):
+                data = await request.json()
+            else:
+                import json
+                body = await request.body()
+                data = json.loads(body)
+            
+            group_id = str(data.get('group_id', ''))
+            message = data.get('message', '')
+            event_type = data.get('event_type', '')
+            
+            if not group_id or not message:
+                logger.warning(f"[XenForo] 收到无效通知数据: {data}")
+                return {'error': '缺少必要参数'}, 400
+            
+            logger.info(f"[XenForo] 收到通知 {event_type} -> 群 {group_id}")
+            
+            # 发送到QQ群
+            try:
+                await self.context.send_message(
+                    message_type="group",
+                    target_id=group_id,
+                    message=message
+                )
+                logger.info(f"[XenForo] 通知已发送到群 {group_id}")
+                return {'status': 'success'}, 200
+            except Exception as e:
+                logger.error(f"[XenForo] 发送消息到群 {group_id} 失败: {e}")
+                return {'error': f'发送失败: {str(e)}'}, 500
+                
+        except Exception as e:
+            logger.error(f"[XenForo] 处理通知失败: {e}")
+            return {'error': str(e)}, 500
+    
+    async def _handle_test(self, request):
+        """测试端点"""
+        return {
+            'status': 'ok',
+            'message': 'AstrBot XenForo插件运行正常',
+            'version': '1.0.2'
+        }, 200
 
     def _resolve_config_path(self, filename: str) -> str:
         get_config_path = getattr(self.context, "get_config_path", None)
